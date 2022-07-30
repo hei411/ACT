@@ -20,6 +20,7 @@ Definition uni_covering {N:Type} (s:@set N) (s': @set (@set N)) :=
 Record complex{N:Type} := {
     V: @set N;
     C: @set (@set N);
+    C_built_from_V: forall s, elem_set s C→ forall v, elem_set v s→ elem_set v V;
     prop1: closed_containment C;
     prop2: uni_covering V C
 }.
@@ -58,13 +59,7 @@ Program Definition simplicial_map_transitive {A1 A2 A3:Type}
 |}.
 Next Obligation.
 exists (λ x, ∃ a, elem_set a s /\ x = m2.(func) (m1.(func) a)).
-split;
-destruct m1;
-destruct m2;
-destruct C1; 
-destruct C2;
-destruct C3;
-simpl in *.
+split;destruct m1, m2,C1,C2,C3; simpl in *.
 apply prop0 in H as H1. destruct H1. destruct H0. 
 apply prop3 in H0 as H2. destruct H2. destruct H2.
 assert (x0 = (λ x1 : A3, ∃ a : A1, elem_set a s ∧ x1 = func1 (func0 a))).
@@ -73,15 +68,12 @@ unfold elem_set in *.
 destruct H1, H3.
 apply EquivThenEqual. split; intros.
 apply H5 in H6 as H7.
-destruct H7.
- destruct H7.
+destruct H7, H7.
  apply H4 in H7 as H9.
- destruct H9.
- destruct H9.
+ destruct H9, H9.
  exists x3; split;eauto.
  rewrite H8, H10. reflexivity.
- destruct H6.
- destruct H6.
+ destruct H6, H6.
  rewrite H7.
  apply H1 in H6.
  apply H3 in H6. auto.
@@ -92,8 +84,7 @@ intros. split; intros.
 unfold elem_set.
 exists a. eauto.
 unfold elem_set in H0.
-destruct H0.
-destruct H0.
+destruct H0, H0.
 exists x.
 split. unfold elem_set.
 eauto. eauto.
@@ -102,75 +93,93 @@ Qed.
 
 
 
-
-
-
-Theorem simplicial_map_transitive: forall (A1 A2 A3:Type) (C1:@complex A1) (C2:@complex A2) (C3:@complex A3) ( f1 :simplicial_map C1 C2) ( f2 :simplicial_map C2 C3),
-    exists  (f3:simplicial_map C1 C3), match C1 with | compl V C compl1 compl2 => 
-    match (f1, f2, f3) with
-        | (sm _ _ f1' _, sm _ _ f2' _ , sm _ _ f3' _)=>
-    forall_set V (fun x=> (f3' x) = f2'(f1' x)) end
-    end.
-    intros.
-    destruct f1 eqn:E1.
-    destruct f2 eqn:E2.
-    remember (fun x=> f0 (f x)) as ans.
-    assert (prop_required: match C1 with
-    | compl V X _ _ =>
-        match C3 with
-        | compl V0 X' _ _ => forall_set X (λ s : set A1, In (map ans s) X')
-        end
-    end).
-    destruct C1 eqn:C1des.
-    destruct C2 eqn:C2des.
-    destruct C3 eqn:C3des.
-    subst.
-    assert ( (λ s : set A1, In (map (λ x : A1, f0 (f x)) s) C4) = 
-    (λ s : set A1, In (map  f0 (map f  s)) C4)).
-    apply functional_extensionality_dep .
-    intros.
-    unfold In.
-    rewrite map_lift.
-    reflexivity.
-    rewrite H.
-    apply in_transitive with C0.
-    auto. auto.
-    exists (sm C1 C3 ans prop_required).
-    destruct C1 eqn :K.
-    rewrite Heqans.
-    induction V.
-    simpl.
-    auto.
-    simpl.
-    split.
-    reflexivity.
-    apply always_true.
-    Qed.
-
-
-
 (* **chromatic*)
 
-Inductive fin_nat_set (n:nat):Type :=
-    | fn (k:nat) (p: (k<?n=true)).
+Record chromatic_complex{N:Type} := {
+    comp: @complex N;
+    n:nat;
+    f:N->nat;
+    chro_prop1: forall x:N, elem_set x comp.(V) → f x < n ;
+    chro_prop2: forall s, elem_set s comp.(C) → forall v v', 
+        (elem_set v s /\ elem_set v' s /\ f v = f v') → v =v' 
+}.
 
+Record chromatic_simplicial_map {A B:Type}{from:@chromatic_complex A} {to:@chromatic_complex B}:=
+    {
+        smap : @simplicial_map A B from.(comp) to.(comp) ;
+        chro_map_prop: (forall x:A, elem_set x from.(comp).(V) →  from.(f) x = to.(f) (smap.(func) x))
+    }.
 
-Inductive chromatic_complex{A:Type n}:Type := 
-| chr_compl (V:set A)  (C:set (set A)) 
-(compl1: closed_containment V C)
-(compl2: uni_covering V C)
-        (f:A -> N)
-        (prop: forall_set C (fun x:set A => forall_set x 
-        (fun v:A=> forall_set x (fun v':A => f(v)=f(v')-> v=v')))).
+Program Definition chromatic_self_identity {N:Type} (c:@chromatic_complex N):chromatic_simplicial_map:= 
+{|
+    smap:=self_identity c.(comp);
+    chro_map_prop:=_
+|}.
 
-Definition matching (n n':nat) (t:fin_nat_set n) (t':fin_nat_set n'):Prop :=
-     match (t, t') with 
-        | (fn _ k _, fn _ k' _)=>k=k'
-    end.
+Definition isomorphic_chromatic_complex{A B:Type} (c:@chromatic_complex A) (c':@chromatic_complex B) := 
+    ∃ (f:@chromatic_simplicial_map A B c c') (g:@chromatic_simplicial_map B A c' c), 
+    forall a, elem_set a c.(comp).(V) → g.(smap).(func) (f.(smap).(func) a) = a /\ 
+    forall b, elem_set b c'.(comp).(V) → f.(smap).(func) (g.(smap).(func) b) = b.
 
-Inductive chromatic_simplicial_map{A B:Type} (C :@chromatic_complex A)(C' :@chromatic_complex B):=
-    | chr_sm (f:A->B) (prop:match (C,C') with 
-        | (chr_compl V X _ _ n l p, chr_compl _ X' _ _ n' l' p')=>
-            forall_set X (fun s:set A=> In (map f s) X') /\
-            forall_set V (fun v:A=>matching (l v) (l' (f v)))
-        end).
+    
+Theorem chromatic_complex_isomorphic_with_itself: forall (N:Type) (c:@chromatic_complex N), isomorphic_chromatic_complex c c.
+Proof.
+    intros.
+    unfold isomorphic_chromatic_complex.
+    exists (chromatic_self_identity c), (chromatic_self_identity c).
+    intros; split; reflexivity.
+Qed.
+
+Program Definition chromatic_simplicial_map_transitive {A1 A2 A3:Type} 
+{C1:@chromatic_complex A1} {C2:@chromatic_complex A2} {C3:@chromatic_complex A3} 
+(m1: @chromatic_simplicial_map A1 A2 C1 C2) (m2: @chromatic_simplicial_map A2 A3 C2 C3): @chromatic_simplicial_map A1 A3 C1 C3:=
+{|
+    smap:= @simplicial_map_transitive A1 A2 A3 C1.(comp) C2.(comp) C3.(comp) m1.(smap) m2.(smap)
+|}.
+Next Obligation.
+destruct m1, m2; simpl.
+apply chro_map_prop0 in H as H2.
+destruct smap0, smap1.
+rewrite H2.
+apply chro_map_prop1.
+destruct C1, C2, C3.
+destruct comp0, comp1, comp2; simpl in *; simpl.
+apply C_built_from_V1 with (λ l, l= func0 x).
+assert (elem_set (λ l, l=x) C0).
+unfold uni_covering in prop5.
+unfold elem_set; unfold elem_set in *.
+apply prop5 in H.
+destruct H.
+destruct H.
+assert (x0 = (λ l : A1, l = x)).
+apply functional_extensionality_dep.
+intros.
+apply EquivThenEqual; split; intros.
+rewrite H0 in H1; auto.
+subst.
+rewrite H0.
+reflexivity.
+rewrite <- H1; auto.
+apply prop0 in H0 as lem1.
+destruct lem1.
+destruct H1.
+destruct H3.
+assert (x0 = (λ l : A2, l = func0 x)).
+apply functional_extensionality_dep.
+intros.
+apply EquivThenEqual.
+split; intros.
+apply H4 in H5.
+ destruct H5.
+ destruct H5.
+ unfold elem_set in H5.
+ subst; reflexivity.
+ subst.
+ apply H3.
+ unfold elem_set.
+ reflexivity.
+ rewrite <-H5.
+ auto.
+ unfold elem_set.
+ reflexivity.
+ Qed.
