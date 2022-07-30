@@ -1,210 +1,109 @@
-Require Import Coq.Lists.ListSet.
 Require Import Coq.Lists.List.
 Require Import Coq.Unicode.Utf8.
 Require Import Coq.Bool.Bool.
 Require Import Coq.Arith.PeanoNat.
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Coq.Logic.ClassicalFacts.
 
-Fixpoint exist_set{A:Type} (x:A) (s:set A):Prop :=
-    match s with 
-        | nil => False
-        | x' ::xs => (x' = x) \/ exist_set x xs
-        end.
+Section Topology.
+Axiom EquivThenEqual: prop_extensionality.
+Definition set{N:Type}:Type := N -> Prop.
+Definition elem_set {N:Type} (n:N) (s:set):= s n.
+Definition subset_set {N:Type}(s s':@set N):= forall k, s k -> s' k.
+Definition equals_set {N:Type} (s s':@set N):= subset_set s s' /\ subset_set s' s.
+Definition closed_containment {N:Type} (s:@set(@set N)) := 
+    forall s', elem_set s' s → forall s'', subset_set s'' s' → elem_set s'' s.
+Definition uni_covering {N:Type} (s:@set N) (s': @set (@set N)) := 
+    forall n, elem_set n s → ∃ singleton, elem_set singleton s' /\ 
+    forall n', singleton n' <-> n'=n.
 
-Fixpoint forall_set {A:Type} (s:set A) (f:A->Prop) :Prop :=
-    match s with 
-        | nil => True
-        | x :: xs => f x /\ (forall_set xs f)
-        end.
+Record complex{N:Type} := {
+    V: @set N;
+    C: @set (@set N);
+    prop1: closed_containment C;
+    prop2: uni_covering V C
+}.
 
-Definition subset_set {A:Type} (s s' :set A):Prop := 
-        forall_set s (fun a:A => In a s').
+Record simplicial_map{A B:Type} {from:@complex A} {to:@complex B}:={
+    func: A->B;
+    prop: forall s, elem_set s from.(C) → ∃ s', elem_set s' to.(C)/\ 
+    (forall a, elem_set a s -> elem_set ( func a) s') /\ 
+    (forall a', elem_set a' s'-> exists a, elem_set a s /\ a' = func a) 
+}.
+Program Definition self_identity {N:Type} (c:@complex N):simplicial_map:= {|
+    func:= λ n:N, n
+|}.
+Next Obligation. exists s. split; auto. split; eauto. 
+Qed. 
 
-Definition equals_set {A:Type } (s s':set A):Prop := 
-    subset_set s s'/\ subset_set s' s.
+Definition isomorphic_complex{A B:Type} (c:@complex A) (c':@complex B) := 
+    ∃ (f:@simplicial_map A B c c') (g:@simplicial_map B A c' c), 
+    forall a, elem_set a c.(V) → g.(func) (f.(func) a) = a /\ 
+    forall b, elem_set b c'.(V) → f.(func) (g.(func) b) = b.
 
-Axiom equals_implies_equality: forall (A:Type) (s s':set A), equals_set s s' -> s=s'.
-
-Definition closed_containment {A:Type} (V:set A)(C:set (set A)):Prop:=
-     forall_set C (fun X: set(A)=> forall (Y:set(A)), subset_set Y X -> In Y C).
-
-Definition uni_covering {A:Type} (V:set A)(C:set (set A)):Prop :=
-    forall_set V (fun a:A=> In (cons a nil) C).
-
-Inductive  complex{A:Type}:Type := 
-     | compl (V:set A)  (C:set (set A)) 
-        (compl1: closed_containment V C)
-        (compl2: uni_covering V C).
-
-Inductive fin_nat_set (n:nat):Type :=
-    | fn (k:nat) (p: (k<?n=true)).
-
-Inductive chromatic_complex{A:Type}:Type := 
-| chr_compl (V:set A)  (C:set (set A)) 
-(compl1: closed_containment V C)
-(compl2: uni_covering V C)
-        (n:nat) (f:A -> (fin_nat_set n))
-        (prop: forall_set C (fun x:set A => forall_set x 
-        (fun v:A=> forall_set x (fun v':A => f(v)=f(v')-> v=v')))).
-
-Inductive simplicial_map{A B:Type} (C :@complex A)(C' :@complex B):=
-    | sm (f:A->B) (prop:match (C,C') with 
-        | (compl _ X _ _, compl _ X' _ _)=>
-            forall_set X (fun s:set A=> In (map f s) X')
-        end).
-
-
-Definition isomorphic_complex{A B:Type} (C :@complex A)(C' :@complex B):=   
-    exists (f:simplicial_map C C') (f':simplicial_map C' C), 
-    match (f,f') with
-    | (sm _ _ m _, sm _ _ m' _ )=> 
-    (match C with |compl V _ _ _ => forall_set V (fun x:A=> m' (m x)=x) end) /\
-    (match C' with |compl V' _ _ _ => forall_set V' (fun x:B=> m (m' x)=x) end)
-    end.
-
-
-Lemma map_id: forall (A:Type) (a:set A), a = map  id a.
-Proof. 
+    
+Theorem complex_isomorphic_with_itself: forall (N:Type) (c:@complex N), isomorphic_complex c c.
+Proof.
     intros.
-    induction a;auto.
-    unfold map.
-    unfold map in IHa.
-    rewrite <- IHa.
-    reflexivity.
+    exists (self_identity c), (self_identity c).
+    intros.
+    split; reflexivity.
+Qed.
+    
+Program Definition simplicial_map_transitive {A1 A2 A3:Type} 
+{C1:@complex A1} {C2:@complex A2} {C3:@complex A3} 
+(m1: @simplicial_map A1 A2 C1 C2) (m2: @simplicial_map A2 A3 C2 C3): @simplicial_map A1 A3 C1 C3:=
+{|
+    func:= λ a, m2.(func) (m1.(func) a)
+|}.
+Next Obligation.
+exists (λ x, ∃ a, elem_set a s /\ x = m2.(func) (m1.(func) a)).
+split;
+destruct m1;
+destruct m2;
+destruct C1; 
+destruct C2;
+destruct C3;
+simpl in *.
+apply prop0 in H as H1. destruct H1. destruct H0. 
+apply prop3 in H0 as H2. destruct H2. destruct H2.
+assert (x0 = (λ x1 : A3, ∃ a : A1, elem_set a s ∧ x1 = func1 (func0 a))).
+apply functional_extensionality_dep; intros.
+unfold elem_set in *.
+destruct H1, H3.
+apply EquivThenEqual. split; intros.
+apply H5 in H6 as H7.
+destruct H7.
+ destruct H7.
+ apply H4 in H7 as H9.
+ destruct H9.
+ destruct H9.
+ exists x3; split;eauto.
+ rewrite H8, H10. reflexivity.
+ destruct H6.
+ destruct H6.
+ rewrite H7.
+ apply H1 in H6.
+ apply H3 in H6. auto.
+unfold elem_set. unfold elem_set in *.
+rewrite <- H4.
+auto.
+intros. split; intros.
+unfold elem_set.
+exists a. eauto.
+unfold elem_set in H0.
+destruct H0.
+destruct H0.
+exists x.
+split. unfold elem_set.
+eauto. eauto.
 Qed.
 
-Lemma stronger_forall_set: forall (A:Type) (s:set A) (f f':A->Prop), (forall x:A, (f x)-> (f' x))-> 
-    forall_set s f -> forall_set s f'.
-    intros A.
-    induction s; intros.
-    auto.
-    unfold forall_set in H0.
-    destruct H0.
-    unfold forall_set.
-    split.
-    apply (H  a H0).
-    apply IHs with f; auto.
-    Qed.
-    
-Lemma identity_subst :forall (A:Type) (C:set(set A)), forall_set C (fun s:set A=> In (map id s) C).
-Proof.
-    intros.
-    unfold forall_set.
-    induction C. auto.
-    split.
-    rewrite <- map_id.
-    simpl.
-    auto.
-    apply stronger_forall_set with (fun s=> In (map id s) C).
-    intros.
-    simpl.
-    right.
-    auto.
-    auto.
-    Qed.
-    
-    
-Lemma id_true: forall (A:Type) (V:set A), forall_set V (λ x : A, id (id x) = x).
-Proof.
-    intros.
-    induction V.
-    simpl. auto.
-    simpl.
-    split; auto.
-    Qed.
 
-Theorem complex_isomorphic_with_itself :forall (A:Type) (c:complex), @isomorphic_complex A A c c.
-Proof.
-    intros.
-    destruct c eqn:K.
-    unfold isomorphic_complex.
-    
-    assert (p: forall_set C (fun s:set A=> In (map id s) C)).
-    induction C; auto;simpl.
-    split.
-    left.
-    apply map_id.
-    apply stronger_forall_set with (fun s:set A=>In (map id s) C).
-    intros.
-    right;auto.
-    apply (identity_subst A C).
-    assert (p':match (c,c) with 
-    | (compl _ X _ _, compl _ X' _ _)=>
-        forall_set X (fun s:set A=> In (map id s) X')
-    end).
-    destruct c eqn:L;subst.
-    inversion K.
-    subst.
-    auto.
-    rewrite <-K.
-    exists (sm c c id p').
-    exists (sm c c id p').
-    split.
-    apply id_true.
-    apply id_true.
-    Qed.
 
-Lemma map_lift: forall (A1 A2 A3:Type) (f1:A1->A2) (f2:A2->A3) (a:set A1), map (fun x=>f2(f1 x)) a = map f2 (map f1 a).
-Proof.
-    intros.
-    induction a.
-    auto.
-    simpl.
-    rewrite IHa.
-    auto.
-    Qed.
-Lemma in_transitive_lemma: forall (A1 A2 A3:Type) (a1:set A1) (a2:set (set A2)) (a3:set (set A3)) (f1:A1->A2) (f2:A2->A3),
-In (map f1 a1) a2->
-(forall (a2':set A2), In a2' a2 -> In (map f2 a2') a3)->
-In (map f2 (map f1 a1)) a3.
-Proof.
-    intros .
-    induction a3;
-    intros;auto.
-    Qed.
 
-Lemma forall_set_in_implies_in :forall (A B:Type) (a:A) (s:set A) (f:A->B) (s':set B),In a s -> forall_set s (fun x:A=> In (f x) s') -> In (f a) s'.
-Proof.
-    intros A B a.
-    induction s.
-    intros.
-    inversion H.
-    intros.
-    unfold forall_set in H0.
-    destruct H0.
-    simpl in H.
-    destruct H.
-    rewrite H in H0.
-    auto.
-    apply IHs.
-    auto. auto.
-    Qed.
-    
-Lemma in_transitive: forall (A1 A2 A3:Type) (s1:set (set A1))   (s2:set (set A2))  (s3:set (set A3)) (f1:A1->A2) (f2:A2->A3),
-    (forall_set s1 (fun x:set A1=> In (map f1 x) s2)) ->       
-    (forall_set s2 (fun x:set A2=> In (map f2 x) s3)) ->
-    (forall_set s1 (fun x:set A1=> In (map f2 (map f1 x)) s3)).
-    Proof.
-    intros A1 A2 A3.
-    induction s1;
-    intros; simpl;auto.
-    split.
-    unfold forall_set in H.
-    destruct H.
-    apply forall_set_in_implies_in with s2; auto.
-    unfold forall_set in H.
-    destruct H.
-    apply IHs1 with s2; auto.
-    Qed.
 
-    
-Lemma always_true: forall (A B :Type) (V:set A) (f:A->B), forall_set V (fun x:A => f x = f x).
-intros.
-induction V.
-simpl;auto.
-simpl.
-split. reflexivity.
-auto. Qed.
+
 
 Theorem simplicial_map_transitive: forall (A1 A2 A3:Type) (C1:@complex A1) (C2:@complex A2) (C3:@complex A3) ( f1 :simplicial_map C1 C2) ( f2 :simplicial_map C2 C3),
     exists  (f3:simplicial_map C1 C3), match C1 with | compl V C compl1 compl2 => 
@@ -250,5 +149,28 @@ Theorem simplicial_map_transitive: forall (A1 A2 A3:Type) (C1:@complex A1) (C2:@
 
 
 
-    
-    
+(* **chromatic*)
+
+Inductive fin_nat_set (n:nat):Type :=
+    | fn (k:nat) (p: (k<?n=true)).
+
+
+Inductive chromatic_complex{A:Type n}:Type := 
+| chr_compl (V:set A)  (C:set (set A)) 
+(compl1: closed_containment V C)
+(compl2: uni_covering V C)
+        (f:A -> N)
+        (prop: forall_set C (fun x:set A => forall_set x 
+        (fun v:A=> forall_set x (fun v':A => f(v)=f(v')-> v=v')))).
+
+Definition matching (n n':nat) (t:fin_nat_set n) (t':fin_nat_set n'):Prop :=
+     match (t, t') with 
+        | (fn _ k _, fn _ k' _)=>k=k'
+    end.
+
+Inductive chromatic_simplicial_map{A B:Type} (C :@chromatic_complex A)(C' :@chromatic_complex B):=
+    | chr_sm (f:A->B) (prop:match (C,C') with 
+        | (chr_compl V X _ _ n l p, chr_compl _ X' _ _ n' l' p')=>
+            forall_set X (fun s:set A=> In (map f s) X') /\
+            forall_set V (fun v:A=>matching (l v) (l' (f v)))
+        end).
