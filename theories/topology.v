@@ -183,3 +183,154 @@ apply H4 in H5.
  unfold elem_set.
  reflexivity.
  Qed.
+
+Definition subd_well_colored{N:Type} (s:@set (@set N * N)) :=
+    forall k l, elem_set k s /\ elem_set l s /\ snd(k)= snd(l)→k=l. 
+
+Definition subd_ordered {N:Type} (s:@set (@set N * N)) :=
+    forall k l, elem_set k s /\ elem_set l s → (subset_set (fst k) (fst l) \/ subset_set (fst l) (fst k)).
+
+Definition subd_transitive {N:Type} (s:@set (@set N * N)) :=
+    forall k l, elem_set k s /\ elem_set l s /\ elem_set (snd l) (fst k)→ subset_set (fst l) (fst k).
+
+  
+Program Definition chromatic_subdivision_complex {N:Type} {c:@chromatic_complex N}: (@chromatic_complex (((@set  N)*N))):=
+let V_set :=
+    (λ p, elem_set (fst p) c.(comp).(C)/\ elem_set (snd p) (fst p)) in
+{|
+    comp := {|
+        V:= V_set;
+        C:= (λ s, (forall v, elem_set v s → elem_set v V_set) /\
+        subd_well_colored s /\ subd_ordered s /\ subd_transitive s)
+    |};
+    n:= c.(n);
+    f:= (λ p, c.(f) (snd p))
+|}.
+Next Obligation. destruct H as [H1 [H2 [H3 H4]] ]. eauto.
+Qed.
+Next Obligation. unfold closed_containment.
+intros. 
+unfold elem_set.
+unfold subset_set, elem_set in *.
+split.
+intros.
+apply H0 in H1 as H2.
+apply H in H2 as H3.
+auto. destruct H. 
+split. 
+unfold subd_well_colored.
+intros.
+destruct H1. unfold subd_well_colored in H1. apply H1.
+unfold elem_set.
+split.
+destruct H2.
+destruct H4.
+eauto.
+split.
+unfold elem_set in *.
+destruct H2 as [_ [? ?]].
+eauto.
+destruct H2 as [_ [ _ ?]].
+auto.
+split.
+unfold subd_ordered.
+intros.
+destruct H1 as [_[? _]].
+unfold subd_ordered in *.
+apply H1.
+split;
+destruct H2; unfold elem_set; unfold elem_set in *;eauto.
+unfold subd_transitive.
+intros.
+destruct H1 as [_[_ ?]].
+unfold subd_transitive in H1.
+apply H1.
+split; unfold elem_set in *; unfold elem_set; destruct H2 as [?[? ?]].
+eauto.
+split;eauto.
+Qed.
+Next Obligation.
+unfold uni_covering.
+intros.
+exists (λ v,v=n0).
+unfold elem_set.
+unfold elem_set in *.
+split.
+split.
+intros; subst; auto.
+split. unfold subd_well_colored.
+intros. destruct k.
+destruct l. unfold elem_set in *. destruct n0. destruct H0 as [?[? ?]].
+rewrite H0, H1. reflexivity.
+split. unfold subd_ordered.
+unfold subset_set. unfold elem_set.
+intros.
+destruct H0; subst. left. eauto.
+unfold subd_transitive.
+unfold elem_set, subset_set.
+intros; destruct H0. destruct H2. subst. auto.
+intros;split;auto.
+Qed.
+Next Obligation.
+destruct c; simpl in *;simpl.
+apply chro_prop3.
+simpl in H.
+destruct comp0; simpl in *; simpl.
+unfold elem_set in *; unfold elem_set.
+simpl in H.
+apply C_built_from_V0 with s.
+destruct H. auto. destruct H. auto.
+Qed.
+Next Obligation.
+
+
+simpl in *.
+destruct c;simpl; simpl in*.
+destruct H as [?[?[? ?]]].
+unfold subd_ordered in H4.
+unfold subd_well_colored in H3.
+apply H3.
+split.
+auto.
+split.
+auto.
+simpl.
+unfold subd_transitive in H5; unfold subset_set in *; unfold elem_set in *.
+assert (s (s1, n1) /\ s (s0,n0)).
+split;auto.
+apply H4 in H6.
+destruct H6.
+simpl in H6.
+apply chro_prop4 with s0.
+apply H in H1.
+destruct H1; simpl in *.
+auto.
+split.
+apply H6.
+apply H in H0.
+destruct H0; simpl in *.
+auto.
+split.
+apply H in H1.
+destruct H1 as [_ ?].
+simpl in H1; auto.
+auto.
+simpl in H6.
+apply chro_prop4 with s1.
+apply H in H0.
+destruct H0.
+simpl in *.
+auto.
+split.
+apply H in H0. destruct H0.
+auto.
+split.
+apply H in H1.
+destruct H1. auto.
+auto.
+Qed.
+
+
+
+
+ 
